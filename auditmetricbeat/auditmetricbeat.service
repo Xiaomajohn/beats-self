@@ -1,0 +1,24 @@
+[Unit]
+Description=AuditMetricbeat - Combined Audit and Metrics Collector
+Documentation=https://www.elastic.co/products/beats
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/share/auditmetricbeat/auditmetricbeat -environment systemd -c /etc/auditmetricbeat/auditmetricbeat.yml --strict.perms=false
+Restart=always
+User=root
+Group=root
+LimitNOFILE=65536
+
+# 安全设置（需要root权限用于audit）
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=false
+
+# 环境变量
+Environment="BEAT_LOG_OPTS="
+
+[Install]
+WantedBy=multi-user.target

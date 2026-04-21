@@ -1,0 +1,97 @@
+# AuditMetricbeat审计规则配置
+# 该文件包含Linux审计系统规则
+
+## 第一部分是配置规则，不应该被修改
+## 移除所有现有规则
+-D
+
+## 增加缓冲区大小
+-b 8192
+
+## 设置失败模式（0=silent, 1=printk, 2=panic）
+-f 1
+
+## ==================== 系统调用监控 ====================
+
+# 监控所有execve调用（命令执行）
+-a always,exit -F arch=b64 -S execve -k commands
+-a always,exit -F arch=b32 -S execve -k commands
+
+# 监控特权命令
+-a always,exit -F arch=b64 -S setuid -S setgid -S setreuid -S setregid -k privileged
+-a always,exit -F arch=b32 -S setuid -S setgid -S setreuid -S setregid -k privileged
+
+# 监控用户和组修改
+-a always,exit -F arch=b64 -S sethostname -S setdomainname -k system_info
+-a always,exit -F arch=b32 -S sethostname -S setdomainname -k system_info
+
+# 监控时间修改
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -S stime -S clock_settime -k time_change
+-a always,exit -F arch=b32 -S adjtimex -S settimeofday -S stime -S clock_settime -k time_change
+
+# 监控网络配置变化
+-a always,exit -F arch=b64 -S setsockopt -S bind -S connect -S listen -S accept -S socket -k network_config
+-a always,exit -F arch=b32 -S setsockopt -S bind -S connect -S listen -S accept -S socket -k network_config
+
+## ==================== 文件监控 ====================
+
+# 监控/etc目录变化
+-w /etc/passwd -p wa -k identity
+-w /etc/group -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/sudoers -p wa -k sudoers
+-w /etc/hosts -p wa -k network_changes
+-w /etc/resolv.conf -p wa -k network_changes
+-w /etc/ssh/sshd_config -p wa -k ssh_config
+
+# 监控日志文件
+-w /var/log/lastlog -p wa -k logins
+-w /var/log/wtmp -p wa -k logins
+-w /var/log/btmp -p wa -k logins
+-w /var/log/secure -p wa -k auth
+-w /var/log/auth.log -p wa -k auth
+
+# 监控cron配置
+-w /etc/crontab -p wa -k cron
+-w /etc/cron.d -p wa -k cron
+-w /var/spool/cron -p wa -k cron
+
+# 监控启动配置
+-w /etc/init.d -p wa -k init
+-w /etc/init -p wa -k init
+-w /etc/systemd -p wa -k systemd
+
+## ==================== 模块加载监控 ====================
+
+# 监控内核模块加载/卸载
+-w /sbin/insmod -p x -k modules
+-w /sbin/rmmod -p x -k modules
+-w /sbin/modprobe -p x -k modules
+-a always,exit -F arch=b64 -S init_module -S delete_module -k modules
+-a always,exit -F arch=b32 -S init_module -S delete_module -k modules
+
+## ==================== 登录监控 ====================
+
+# 监控登录程序
+-w /usr/bin/sudo -p x -k sudo
+-w /usr/bin/su -p x -k su
+-w /usr/bin/ssh -p x -k ssh
+-w /usr/sbin/sshd -p x -k sshd
+
+## ==================== 特殊权限文件 ====================
+
+# 监控setuid/setgid文件
+-a always,exit -F arch=b64 -S chmod -S fchmod -S fchmodat -k perm_mod
+-a always,exit -F arch=b32 -S chmod -S fchmod -S fchmodat -k perm_mod
+-a always,exit -F arch=b64 -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S removexattr -S lremovexattr -k perm_mod
+-a always,exit -F arch=b32 -S chown -S fchown -S fchownat -S lchown -S setxattr -S lsetxattr -S removexattr -S lremovexattr -k perm_mod
+
+## ==================== 访问控制 ====================
+
+# 监控访问控制配置
+-w /etc/selinux -p wa -k MAC_policy
+-w /etc/apparmor -p wa -k MAC_policy
+
+## ==================== 使配置不可变 ====================
+# 注意：启用后将无法动态修改规则，需要重启才能更改
+# -e 2

@@ -1,0 +1,217 @@
+# ============================== AuditMetricbeat Configuration ==============================
+# 合并了Auditbeat和Metricbeat功能的统一数据采集器
+# ==============================
+
+# ============================== 基础配置 ==============================
+
+# 模块配置路径
+auditmetricbeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+# 数据路径
+path.data: ${path.data}/auditmetricbeat
+path.logs: ${path.logs}/auditmetricbeat
+
+# ============================== Auditbeat模块 ==============================
+
+# Auditd模块 - Linux内核审计
+- module: auditd
+  enabled: true
+  audit_rule_files:
+    - '${path.config}/audit.rules.d/*.rules'
+  
+  # 是否解析UID/GID为用户名/组名
+  resolve_ids: true
+  
+  # 失败模式: silent, log, panic
+  failure_mode: silent
+  
+  # 背压策略: auto, kernel, userspace, both, none
+  backpressure_strategy: auto
+  
+  # 是否包含原始消息
+  raw_message: false
+  
+  # 是否包含警告信息
+  warnings: false
+  
+  # 不可变模式（锁定审计配置）
+  immutable: false
+  
+  # 重新组装配置
+  reassembler_max_in_flight: 32
+  reassembler_timeout: 30s
+
+# 文件完整性监控模块
+- module: file_integrity
+  enabled: true
+  paths:
+    - /bin
+    - /usr/bin
+    - /sbin
+    - /usr/sbin
+    - /etc
+    - /var/log
+    - /boot
+  
+  # 启动时扫描
+  scan_at_start: true
+  
+  # 扫描速率限制
+  scan_rate_per_sec: 50 MiB
+  
+  # 最大文件大小
+  max_file_size: 100 MiB
+  
+  # 哈希算法
+  hash_types: [sha256]
+  
+  # 递归扫描
+  recursive: false
+  
+  # 排除路径
+  # exclude_files:
+  #   - '(?i)\.log$'
+
+# ============================== Metricbeat模块 ==============================
+
+# 系统指标模块
+- module: system
+  enabled: true
+  metricsets:
+    - cpu           # CPU使用率
+    - memory        # 内存使用
+    - network       # 网络流量
+    - diskio        # 磁盘I/O
+    - filesystem    # 文件系统使用
+    - load          # 系统负载
+    - process       # 进程信息
+    - process_summary # 进程摘要
+    - uptime        # 系统运行时间
+    - core          # CPU核心信息
+  
+  # 采集周期
+  period: 10s
+  
+  # 进程过滤
+  processes: ['.*']
+  
+  # CPU指标类型
+  cpu.metrics: ["percentages", "normalized_percentages"]
+  
+  # 内存指标类型
+  memory.metrics: ["percentages"]
+  
+  # 进程配置
+  process.include_top_n:
+    by_cpu: 5
+    by_memory: 5
+
+# Linux内核指标模块（可选）
+# - module: linux
+#   enabled: true
+#   metricsets:
+#     - conntrack    # 连接跟踪
+#     - memory       # 内核内存
+#     - network      # 网络统计
+#     - socket       # 套接字统计
+#   period: 10s
+
+# ============================== 输出配置 ==============================
+
+# Elasticsearch输出
+output.elasticsearch:
+  hosts: ["localhost:9200"]
+  
+  # 认证信息
+  # username: "elastic"
+  # password: "changeme"
+  
+  # API Key认证（可选）
+  # api_key: "id:api_key"
+  
+  # 索引配置
+  indices:
+    # 审计事件索引
+    - index: "auditmetricbeat-audit-%{+yyyy.MM.dd}"
+      when.contains:
+        event.module: "auditd"
+    
+    # 文件完整性索引
+    - index: "auditmetricbeat-fileintegrity-%{+yyyy.MM.dd}"
+      when.contains:
+        event.module: "file_integrity"
+    
+    # 系统指标索引
+    - index: "auditmetricbeat-metrics-%{+yyyy.MM.dd}"
+      when.contains:
+        event.module: "system"
+  
+  # 批量大小
+  bulk_max_size: 2048
+  
+  # 压缩级别 (0-9)
+  compression_level: 5
+  
+  # 超时设置
+  timeout: 90s
+
+# Logstash输出（可选）
+#output.logstash:
+#  hosts: ["localhost:5044"]
+#  
+#  # 负载均衡
+#  loadbalance: true
+#  
+#  # 批量大小
+#  bulk_max_size: 2048
+
+# Console输出（调试用）
+#output.console:
+#  pretty: true
+
+# ============================== 日志配置 ==============================
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/auditmetricbeat
+  name: auditmetricbeat.log
+  keepfiles: 7
+  permissions: 0640
+  interval: 24h
+  rotateonstartup: true
+
+# 日志选择器
+# logging.selectors: ["*"]
+
+# ============================== 队列配置 ==============================
+
+# 内存队列
+queue.mem:
+  events: 4096
+  flush.min_events: 512
+  flush.timeout: 10s
+
+# ============================== HTTP监控 ==============================
+
+http.enabled: false
+http.host: localhost
+http.port: 5066
+
+# ============================== 其他配置 ==============================
+
+# 最大CPU数
+# max_procs: 4
+
+# 名称
+name: "${HOSTNAME}"
+
+# 标签
+# tags: ["production", "security"]
+
+# 字段
+# fields:
+#   env: production
+#   datacenter: us-east

@@ -5,6 +5,7 @@
 package oracle
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/godror/godror"
@@ -13,16 +14,21 @@ import (
 
 // GetOracleConnectionDetails return a valid SID to use for testing
 func GetOracleConnectionDetails(host string) string {
-	params := godror.ConnectionParams{
-		CommonParams: dsn.CommonParams{
-			CommonSimpleParams: dsn.CommonSimpleParams{
-				Username: GetOracleEnvUsername(),
-				Password: dsn.NewPassword((GetOracleEnvPassword())),
-			},
-		},
-		ConnParams: dsn.ConnParams{
-			AdminRole: dsn.SysDBA,
-		},
+	// Build connection string
+	connectString := fmt.Sprintf("oracle://%s:%s@%s",
+		GetOracleEnvUsername(),
+		GetOracleEnvPassword(),
+		host)
+
+	params, err := godror.ParseDSN(connectString)
+	if err != nil {
+		// Fallback to simple format if parsing fails
+		return connectString
+	}
+
+	// Set admin role
+	params.ConnParams = dsn.ConnParams{
+		AdminRole: dsn.SysDBA,
 	}
 
 	return params.StringWithPassword()

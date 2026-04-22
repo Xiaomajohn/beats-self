@@ -1,0 +1,741 @@
+// Licensed to Elasticsearch B.V. under one or more contributor
+// license agreements. See the NOTICE file distributed with
+// this work for additional information regarding copyright
+// ownership. Elasticsearch B.V. licenses this file to you under
+// the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package jmx
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/elastic/elastic-agent-libs/logp"
+)
+
+func TestBuildJolokiaGETUri(t *testing.T) {
+	cases := []struct {
+		mbean      string
+		attributes []Attribute
+		expected   string
+	}{
+		{
+			mbean: `java.lang:type=Memory`,
+			attributes: []Attribute{
+				Attribute{
+					Attr:  `HeapMemoryUsage`,
+					Field: `heapMemoryUsage`,
+				},
+			},
+			expected: `/read/java.lang:type=Memory/HeapMemoryUsage`,
+		},
+		{
+			mbean: `java.lang:type=Memory`,
+			attributes: []Attribute{
+				Attribute{
+					Attr:  `HeapMemoryUsage`,
+					Field: `heapMemoryUsage`,
+				},
+				Attribute{
+					Attr:  `NonHeapMemoryUsage`,
+					Field: `nonHeapMemoryUsage`,
+				},
+			},
+			expected: `/read/java.lang:type=Memory/HeapMemoryUsage,NonHeapMemoryUsage`,
+		},
+		{
+			mbean: `Catalina:name=HttpRequest1,type=RequestProcessor,worker=!"http-nio-8080!"`,
+			attributes: []Attribute{
+				Attribute{
+					Attr:  `globalProcessor`,
+					Field: `maxTime`,
+				}},
+			expected: `/read/Catalina:name=HttpRequest1,type=RequestProcessor,worker=!"http-nio-8080!"/globalProcessor`,
+		},
+	}
+
+	for _, c := range cases {
+		jolokiaGETFetcher := &JolokiaHTTPGetFetcher{}
+		getURI := jolokiaGETFetcher.buildJolokiaGETUri(c.mbean, c.attributes)
+
+		assert.Equal(t, c.expected, getURI, "mbean: "+c.mbean)
+
+	}
+}
+
+func TestParseMBean(t *testing.T) {
+
+	cases := map[string]struct {
+		mbean    string
+		expected *MBeanName
+		ok       bool
+	}{
+		"empty": {
+			mbean: ``,
+			ok:    false,
+		},
+		"no domain": {
+			mbean: `type=Runtime`,
+			ok:    false,
+		},
+		"no properties": {
+			mbean: `java.lang`,
+			ok:    false,
+		},
+		"no properties, with colon": {
+			mbean: `java.lang:`,
+			ok:    false,
+		},
+		"property without value": {
+			mbean: `java.lang:type=Runtime,name`,
+			ok:    false,
+		},
+		"single property": {
+			mbean: `java.lang:type=Runtime`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"other single property": {
+			mbean: `java.lang:type=Memory`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"type": "Memory",
+				},
+			},
+			ok: true,
+		},
+		"multiple properties": {
+			mbean: `java.lang:name=Foo,type=Runtime`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "Foo",
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"property with wildcard": {
+			mbean: `java.lang:type=Runtime,name=Foo*`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "Foo*",
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"property with wildcard as value": {
+			mbean: `java.lang:type=Runtime,name=*`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "*",
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"quoted property": {
+			mbean: `java.lang:name="foo,bar",type=Runtime`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": `"foo,bar"`,
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"multiple quoted properties": {
+			mbean: `java.lang:name="foo",othername="bar",type=Runtime`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name":      `"foo"`,
+					"othername": `"bar"`,
+					"type":      "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"escaped quote in quoted property": {
+			mbean: `java.lang:name="foo,\"bar\"",type=Runtime`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": `"foo,\"bar\""`,
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"newline in quoted property": {
+			mbean: `java.lang:name="foo\nbar",type=Runtime`,
+			expected: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": `"foo\nbar"`,
+					"type": "Runtime",
+				},
+			},
+			ok: true,
+		},
+		"real catalina mbean": {
+			mbean: `Catalina:name=HttpRequest1,type=RequestProcessor,worker="http-nio-8080"`,
+			expected: &MBeanName{
+				Domain: `Catalina`,
+				Properties: map[string]string{
+					"name":   "HttpRequest1",
+					"type":   "RequestProcessor",
+					"worker": `"http-nio-8080"`,
+				},
+			},
+			ok: true,
+		},
+		"real activemq artemis mbean": {
+			mbean: `org.apache.activemq.artemis:broker="0.0.0.0",component=addresses,address="helloworld",subcomponent=queues,routing-type="anycast",queue="helloworld"`,
+			expected: &MBeanName{
+				Domain: `org.apache.activemq.artemis`,
+				Properties: map[string]string{
+					"broker":       `"0.0.0.0"`,
+					"component":    `addresses`,
+					"address":      `"helloworld"`,
+					"subcomponent": `queues`,
+					"routing-type": `"anycast"`,
+					"queue":        `"helloworld"`,
+				},
+			},
+			ok: true,
+		},
+	}
+
+	for title, c := range cases {
+		t.Run(title, func(t *testing.T) {
+			beanObj, err := ParseMBeanName(c.mbean)
+
+			if c.ok {
+				if assert.NoError(t, err, "failed parsing for: "+c.mbean) {
+					t.Log("Canonicalized mbean: ", beanObj.Canonicalize(true))
+				}
+				assert.Equal(t, c.expected, beanObj, "mbean: "+c.mbean)
+			} else {
+				assert.Error(t, err, "should have failed for: "+c.mbean)
+			}
+		})
+	}
+
+}
+
+func TestCanonicalizeMbeanName(t *testing.T) {
+
+	cases := []struct {
+		mbean    *MBeanName
+		expected string
+		escape   bool
+	}{
+
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"type": "Runtime",
+				},
+			},
+			escape:   true,
+			expected: `java.lang:type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"type": "Runtime",
+				},
+			},
+			escape:   false,
+			expected: `java.lang:type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "Foo",
+					"type": "Runtime",
+				},
+			},
+			escape:   true,
+			expected: `java.lang:name=Foo,type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "Foo",
+					"type": "Runtime",
+				},
+			},
+			escape:   false,
+			expected: `java.lang:name=Foo,type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "Foo",
+					"type": "Runtime",
+				},
+			},
+			escape:   true,
+			expected: `java.lang:name=Foo,type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "Foo*",
+					"type": "Runtime",
+				},
+			},
+			escape:   true,
+			expected: `java.lang:name=Foo*,type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": "*",
+					"type": "Runtime",
+				},
+			},
+			escape:   true,
+			expected: `java.lang:name=*,type=Runtime`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"name": `"foo,bar"`,
+					"type": "Runtime",
+				},
+			},
+			escape:   true,
+			expected: `java.lang:name=!"foo,bar!",type=Runtime`,
+		},
+		{
+			expected: `java.lang:type=Memory`,
+			mbean: &MBeanName{
+				Domain: `java.lang`,
+				Properties: map[string]string{
+					"type": "Memory",
+				},
+			},
+			escape: true,
+		},
+		{
+			expected: `jboss.jmx:alias=jmx!/rmi!/RMIAdaptor!/State`,
+			mbean: &MBeanName{
+				Domain: `jboss.jmx`,
+				Properties: map[string]string{
+					"alias": "jmx/rmi/RMIAdaptor/State",
+				},
+			},
+			escape: true,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `Catalina`,
+				Properties: map[string]string{
+					"name":   "HttpRequest1",
+					"type":   "RequestProcessor",
+					"worker": `"http-nio-8080"`,
+				},
+			},
+			escape:   true,
+			expected: `Catalina:name=HttpRequest1,type=RequestProcessor,worker=!"http-nio-8080!"`,
+		},
+		{
+			mbean: &MBeanName{
+				Domain: `solr`,
+				Properties: map[string]string{
+					"dom1":  "jvm",
+					"name":  "used",
+					"name0": "memory",
+					"name1": "total",
+				},
+			},
+			escape:   true,
+			expected: `solr:dom1=jvm,name=used,name0=memory,name1=total`,
+		},
+	}
+
+	for _, c := range cases {
+		canonicalString := c.mbean.Canonicalize(c.escape)
+
+		assert.Equal(t, c.expected, canonicalString)
+	}
+
+}
+
+func TestBuildGETRequestsAndMappings(t *testing.T) {
+
+	cases := []struct {
+		mappings          []JMXMapping
+		httpMethod        string
+		uris              []string
+		attributeMappings AttributeMapping
+		ok                bool
+	}{
+		{
+			mappings: []JMXMapping{
+				{
+
+					MBean: "java.lang:type=Runtime",
+					Attributes: []Attribute{
+						{
+							Attr:  "Uptime",
+							Field: "uptime",
+						},
+					},
+					Target: Target{
+						URL:      `service:jmx:rmi:///jndi/rmi://targethost:9999/jmxrmi`,
+						User:     "jolokia",
+						Password: "password",
+					},
+				},
+				{
+					MBean: "java.lang:type=GarbageCollector,name=ConcurrentMarkSweep",
+					Attributes: []Attribute{
+						{
+							Attr:  "CollectionTime",
+							Field: "gc.cms_collection_time",
+						},
+						{
+							Attr:  "CollectionCount",
+							Field: "gc.cms_collection_count",
+						},
+					},
+					Target: Target{
+						URL:      `service:jmx:rmi:///jndi/rmi://targethost:9999/jmxrmi`,
+						User:     "jolokia",
+						Password: "password",
+					},
+				},
+				{
+					MBean: "java.lang:type=Memory",
+					Attributes: []Attribute{
+						{
+							Attr:  "HeapMemoryUsage",
+							Field: "memory.heap_usage",
+						},
+						{
+							Attr:  "NonHeapMemoryUsage",
+							Field: "memory.non_heap_usage",
+						},
+					},
+					Target: Target{
+						URL:      `service:jmx:rmi:///jndi/rmi://targethost:9999/jmxrmi`,
+						User:     "jolokia",
+						Password: "password",
+					},
+				},
+			},
+			ok: false,
+		},
+		{
+			mappings: []JMXMapping{
+				{
+
+					MBean: "java.lang:type=Runtime",
+					Attributes: []Attribute{
+						{
+							Attr:  "Uptime",
+							Field: "uptime",
+						},
+					},
+				},
+				{
+					MBean: "java.lang:type=GarbageCollector,name=ConcurrentMarkSweep",
+					Attributes: []Attribute{
+						{
+							Attr:  "CollectionTime",
+							Field: "gc.cms_collection_time",
+						},
+						{
+							Attr:  "CollectionCount",
+							Field: "gc.cms_collection_count",
+						},
+					},
+				},
+				{
+					MBean: "java.lang:type=Memory",
+					Attributes: []Attribute{
+						{
+							Attr:  "HeapMemoryUsage",
+							Field: "memory.heap_usage",
+						},
+						{
+							Attr:  "NonHeapMemoryUsage",
+							Field: "memory.non_heap_usage",
+						},
+					},
+				},
+			},
+			httpMethod: "GET",
+			uris: []string{
+				"/read/java.lang:type=Runtime/Uptime",
+				"/read/java.lang:name=ConcurrentMarkSweep,type=GarbageCollector/CollectionTime,CollectionCount",
+				"/read/java.lang:type=Memory/HeapMemoryUsage,NonHeapMemoryUsage",
+			},
+			attributeMappings: map[attributeMappingKey]Attribute{
+				attributeMappingKey{"java.lang:type=Runtime", "Uptime"}: Attribute{
+					Attr:  "Uptime",
+					Field: "uptime",
+				},
+				attributeMappingKey{"java.lang:name=ConcurrentMarkSweep,type=GarbageCollector", "CollectionTime"}: Attribute{
+					Attr:  "CollectionTime",
+					Field: "gc.cms_collection_time",
+				},
+				attributeMappingKey{"java.lang:name=ConcurrentMarkSweep,type=GarbageCollector", "CollectionCount"}: Attribute{
+					Attr:  "CollectionCount",
+					Field: "gc.cms_collection_count",
+				},
+				attributeMappingKey{"java.lang:type=Memory", "HeapMemoryUsage"}: Attribute{
+					Attr:  "HeapMemoryUsage",
+					Field: "memory.heap_usage",
+				},
+				attributeMappingKey{"java.lang:type=Memory", "NonHeapMemoryUsage"}: Attribute{
+					Attr:  "NonHeapMemoryUsage",
+					Field: "memory.non_heap_usage",
+				},
+			},
+			ok: true,
+		},
+	}
+
+	for _, c := range cases {
+
+		jolokiaGETFetcher := &JolokiaHTTPGetFetcher{}
+
+		httpReqs, attrMaps, myerr := jolokiaGETFetcher.BuildRequestsAndMappings(c.mappings)
+
+		if c.ok == false {
+			assert.Error(t, myerr, "should have failed for httpMethod: "+c.httpMethod)
+			continue
+		}
+
+		assert.Nil(t, myerr)
+		assert.NotNil(t, attrMaps)
+
+		// Test returned URIs
+		for i, r := range httpReqs {
+			assert.Equal(t, c.uris[i], r.URI, "request uri: ", r.URI)
+		}
+
+		assert.Equal(t, c.attributeMappings, attrMaps)
+
+	}
+
+}
+func TestBuildPOSTRequestsAndMappings(t *testing.T) {
+
+	cases := []struct {
+		mappings          []JMXMapping
+		httpMethod        string
+		body              string
+		attributeMappings AttributeMapping
+	}{
+
+		{
+			mappings: []JMXMapping{
+				{
+
+					MBean: "java.lang:type=Runtime",
+					Attributes: []Attribute{
+						{
+							Attr:  "Uptime",
+							Field: "uptime",
+						},
+					},
+					Target: Target{
+						URL:      `service:jmx:rmi:///jndi/rmi://targethost:9999/jmxrmi`,
+						User:     "jolokia",
+						Password: "password",
+					},
+				},
+				{
+
+					MBean: "java.lang:type=Runtime",
+					Attributes: []Attribute{
+						{
+							Attr:  "Uptime",
+							Field: "uptime",
+						},
+					},
+				}, {
+					MBean: "java.lang:type=GarbageCollector,name=ConcurrentMarkSweep",
+					Attributes: []Attribute{
+						{
+							Attr:  "CollectionTime",
+							Field: "gc.cms_collection_time",
+						},
+						{
+							Attr:  "CollectionCount",
+							Field: "gc.cms_collection_count",
+						},
+					},
+				},
+				{
+					MBean: "java.lang:type=Memory",
+					Attributes: []Attribute{
+						{
+							Attr:  "HeapMemoryUsage",
+							Field: "memory.heap_usage",
+						},
+						{
+							Attr:  "NonHeapMemoryUsage",
+							Field: "memory.non_heap_usage",
+						},
+					},
+				},
+			},
+			httpMethod: "POST",
+			body:       `[{"type":"read","mbean":"java.lang:type=Runtime","attribute":["Uptime"],"config":{"canonicalNaming":true,"ignoreErrors":true},"target":{"url":"service:jmx:rmi:///jndi/rmi://targethost:9999/jmxrmi","user":"jolokia","password":"password"}},{"type":"read","mbean":"java.lang:type=Runtime","attribute":["Uptime"],"config":{"canonicalNaming":true,"ignoreErrors":true}},{"type":"read","mbean":"java.lang:name=ConcurrentMarkSweep,type=GarbageCollector","attribute":["CollectionTime","CollectionCount"],"config":{"canonicalNaming":true,"ignoreErrors":true}},{"type":"read","mbean":"java.lang:type=Memory","attribute":["HeapMemoryUsage","NonHeapMemoryUsage"],"config":{"canonicalNaming":true,"ignoreErrors":true}}]`,
+			attributeMappings: map[attributeMappingKey]Attribute{
+				attributeMappingKey{"java.lang:type=Runtime", "Uptime"}: Attribute{
+					Attr:  "Uptime",
+					Field: "uptime",
+				},
+				attributeMappingKey{"java.lang:name=ConcurrentMarkSweep,type=GarbageCollector", "CollectionTime"}: Attribute{
+					Attr:  "CollectionTime",
+					Field: "gc.cms_collection_time",
+				},
+				attributeMappingKey{"java.lang:name=ConcurrentMarkSweep,type=GarbageCollector", "CollectionCount"}: Attribute{
+					Attr:  "CollectionCount",
+					Field: "gc.cms_collection_count",
+				},
+				attributeMappingKey{"java.lang:type=Memory", "HeapMemoryUsage"}: Attribute{
+					Attr:  "HeapMemoryUsage",
+					Field: "memory.heap_usage",
+				},
+				attributeMappingKey{"java.lang:type=Memory", "NonHeapMemoryUsage"}: Attribute{
+					Attr:  "NonHeapMemoryUsage",
+					Field: "memory.non_heap_usage",
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+
+		jolokiaPOSTBuilder := &JolokiaHTTPPostFetcher{}
+
+		httpReqs, attrMaps, myerr := jolokiaPOSTBuilder.BuildRequestsAndMappings(c.mappings)
+
+		assert.Nil(t, myerr)
+		assert.NotNil(t, attrMaps)
+
+		// Test returned URIs
+		for _, r := range httpReqs {
+			// assert.Equal(t, c.uris[i], r.Uri, "request uri: ", r.Uri)
+			assert.Equal(t, c.body, string(r.Body), "body", r.Body)
+		}
+
+		assert.Equal(t, c.attributeMappings, attrMaps)
+
+	}
+
+}
+
+func TestNewJolokiaHTTPClient(t *testing.T) {
+
+	cases := []struct {
+		httpMethod string
+		expected   JolokiaHTTPRequestFetcher
+	}{
+
+		{
+			httpMethod: "GET",
+			expected:   &JolokiaHTTPGetFetcher{logp.NewNopLogger()},
+		},
+		{
+			httpMethod: "",
+			expected:   &JolokiaHTTPPostFetcher{logp.NewNopLogger()},
+		},
+		{
+			httpMethod: "GET",
+			expected:   &JolokiaHTTPGetFetcher{logp.NewNopLogger()},
+		},
+		{
+			httpMethod: "POST",
+			expected:   &JolokiaHTTPPostFetcher{logp.NewNopLogger()},
+		},
+	}
+
+	for _, c := range cases {
+		jolokiaGETClient := NewJolokiaHTTPRequestFetcher(c.httpMethod, logp.NewNopLogger())
+
+		assert.Equal(t, c.expected, jolokiaGETClient, "httpMethod: "+c.httpMethod)
+	}
+}
+
+func TestSetUpdatedURL(t *testing.T) {
+	tests := []struct {
+		name         string
+		sanitizedURI string
+		uri          string
+		expected     string
+	}{
+		{
+			name:         "With encoded query in sanitizedURI",
+			sanitizedURI: "http://localhost:8778/jolokia%3FignoreErrors=false&canonicalNaming=false",
+			uri:          "/read/java.lang:type=Runtime/Uptime",
+			expected:     "http://localhost:8778/jolokia/read/java.lang:type=Runtime/Uptime/?ignoreErrors=false&canonicalNaming=false",
+		},
+		{
+			name:         "With encoded query and trailing slash",
+			sanitizedURI: "http://localhost:8778/jolokia/%3FmaxDepth=2",
+			uri:          "/read/java.lang:type=Memory/HeapMemoryUsage",
+			expected:     "http://localhost:8778/jolokia/read/java.lang:type=Memory/HeapMemoryUsage/?maxDepth=2",
+		},
+		{
+			name:         "Without encoded query, add default",
+			sanitizedURI: "http://localhost:8778/jolokia",
+			uri:          "/read/java.lang:type=Runtime/Uptime",
+			expected:     "http://localhost:8778/jolokia/read/java.lang:type=Runtime/Uptime/?ignoreErrors=true&canonicalNaming=false",
+		},
+		{
+			name:         "Without encoded query, trailing slash",
+			sanitizedURI: "http://localhost:8778/jolokia/",
+			uri:          "/read/java.lang:type=Threading/ThreadCount",
+			expected:     "http://localhost:8778/jolokia/read/java.lang:type=Threading/ThreadCount/?ignoreErrors=true&canonicalNaming=false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := SetUpdatedURL(tt.sanitizedURI, tt.uri)
+			if result != tt.expected {
+				t.Errorf("got: %s, want: %s", result, tt.expected)
+			}
+		})
+	}
+}

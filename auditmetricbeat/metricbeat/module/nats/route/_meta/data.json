@@ -1,0 +1,36 @@
+{
+    "@timestamp": "2017-10-12T08:05:34.853Z",
+    "event": {
+        "dataset": "nats.route",
+        "duration": 115000,
+        "module": "nats"
+    },
+    "metricset": {
+        "name": "route",
+        "period": 10000
+    },
+    "nats": {
+        "route": {
+            "in": {
+                "bytes": 112330,
+                "messages": 1669
+            },
+            "ip": "172.19.0.3",
+            "out": {
+                "bytes": 76865,
+                "messages": 1258
+            },
+            "pending_size": 0,
+            "port": 35808,
+            "remote_id": "NCLTOCCWWFT55ANXSNIMXTP2Q4CEL42V2K2BNDXGM5YNMTBMULQO5V7L",
+            "subscriptions": 42
+        },
+        "server": {
+            "id": "NBND4PX5S47JXJZYEWSDE2KYOTEK2SM6MBMSQQ5ZUA5URNULLFFMTFJH"
+        }
+    },
+    "service": {
+        "address": "localhost:60202",
+        "type": "nats"
+    }
+}

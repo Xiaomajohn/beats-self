@@ -1,0 +1,25 @@
+{
+    "@timestamp": "2017-10-12T08:05:34.853Z",
+    "event": {
+        "dataset": "nats.routes",
+        "duration": 115000,
+        "module": "nats"
+    },
+    "metricset": {
+        "name": "routes",
+        "period": 10000
+    },
+    "nats": {
+        "routes": {
+            "total": 1
+        },
+        "server": {
+            "id": "NBND4PX5S47JXJZYEWSDE2KYOTEK2SM6MBMSQQ5ZUA5URNULLFFMTFJH",
+            "time": "2025-03-16T13:45:57.441899971Z"
+        }
+    },
+    "service": {
+        "address": "localhost:60202",
+        "type": "nats"
+    }
+}

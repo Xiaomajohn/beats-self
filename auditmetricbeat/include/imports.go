@@ -18,21 +18,21 @@
 package include
 
 import (
-	// Auditbeat模块
-	_ "github.com/elastic/beats/v7/auditbeat/module/auditd"
-	_ "github.com/elastic/beats/v7/auditbeat/module/file_integrity"
+	// Auditbeat模块（本地代码）
+	_ "github.com/elastic/beats/v7/auditmetricbeat/auditbeat/module/auditd"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/auditbeat/module/file_integrity"
 
-	// Metricbeat系统模块
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/core"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/cpu"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/diskio"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/filesystem"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/load"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/memory"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/network"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/process"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/process_summary"
-	_ "github.com/elastic/beats/v7/metricbeat/module/system/uptime"
+	// Metricbeat系统模块（本地代码）
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/core"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/cpu"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/diskio"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/filesystem"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/load"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/memory"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/network"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/process"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/process_summary"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/system/uptime"
 	// Metricbeat Linux模块（可选）
-	// _ "github.com/elastic/beats/v7/metricbeat/module/linux"
+	// _ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/module/linux"
 )

@@ -1,0 +1,7 @@
+services:
+  golang:
+    image: docker.elastic.co/integrations-ci/beats-golang:1
+    build:
+      context: ./_meta
+    ports:
+      - 6060

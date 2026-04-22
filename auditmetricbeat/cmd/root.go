@@ -23,21 +23,22 @@ import (
 
 	"github.com/elastic/elastic-agent-libs/mapstr"
 
-	"github.com/elastic/beats/v7/auditbeat/ab"
-	"github.com/elastic/beats/v7/auditbeat/core"
+	// 使用本地auditbeat代码
+	"github.com/elastic/beats/v7/auditmetricbeat/auditbeat/ab"
+	"github.com/elastic/beats/v7/auditmetricbeat/auditbeat/core"
 	"github.com/elastic/beats/v7/libbeat/cmd"
 	"github.com/elastic/beats/v7/libbeat/cmd/instance"
 	"github.com/elastic/beats/v7/libbeat/ecs"
 	"github.com/elastic/beats/v7/libbeat/processors"
 	"github.com/elastic/beats/v7/libbeat/publisher/processing"
-	"github.com/elastic/beats/v7/metricbeat/beater"
-	"github.com/elastic/beats/v7/metricbeat/mb/module"
+	// 使用本地metricbeat代码
+	"github.com/elastic/beats/v7/auditmetricbeat/metricbeat/beater"
+	"github.com/elastic/beats/v7/auditmetricbeat/metricbeat/mb/module"
 
-	// Register auditbeat modules
-	_ "github.com/elastic/beats/v7/auditbeat/include"
-	// Register metricbeat modules
-	_ "github.com/elastic/beats/v7/metricbeat/include"
-	_ "github.com/elastic/beats/v7/metricbeat/include/fields"
+	// 注册本地模块
+	_ "github.com/elastic/beats/v7/auditmetricbeat/auditbeat/include"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/include"
+	_ "github.com/elastic/beats/v7/auditmetricbeat/metricbeat/include/fields"
 )
 
 const (

@@ -10,14 +10,13 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/go-sql-driver/mysql"
-	"github.com/godror/godror"
-	"github.com/godror/godror/dsn"
-
 	"github.com/elastic/beats/v7/metricbeat/helper/sql"
 	"github.com/elastic/beats/v7/metricbeat/mb"
 	"github.com/elastic/elastic-agent-libs/logp"
 	"github.com/elastic/elastic-agent-libs/transport/tlscommon"
+	"github.com/go-sql-driver/mysql"
+	"github.com/godror/godror"
+	"github.com/godror/godror/dsn"
 )
 
 // ConnectionDetails contains all possible data that can be used to create a connection with
